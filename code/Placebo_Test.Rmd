@@ -1,0 +1,221 @@
+---
+title: "Final_Project_Analysis"
+output:
+  word_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+library(data.table)
+library(dplyr)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+d <- read.csv("./Article_Opinion_Label_Survey.csv", stringsAsFactors = FALSE)
+d_df<-data.frame(d)
+#group<- group_by(d_df,  success)
+d_df <- d_df[-c(1,2),]
+barplot(table(d_df[d_df$Group=='Treatment',]$Q3),main='Treatment Political Distribution',cex.names=.85)
+barplot(table(d_df[d_df$Group=='Control',]$Q3),main='Control Political Distribution',cex.names=.85)
+barplot(table(d_df[d_df$Group=='Treatment',]$Q4),main='Treatment Age Distribution',cex.names=.85)
+barplot(table(d_df[d_df$Group=='Control',]$Q4),main='Control Age Distribution',cex.names=.85)
+barplot(table(d_df[d_df$Group=='Treatment',]$Q1),main='Treatment Gender Distribution',cex.names=.85)
+barplot(table(d_df[d_df$Group=='Control',]$Q1),main='Control Gender Distribution',cex.names=.85)
+
+
+
+unique(d_df$Group)
+```
+
+
+```{r}
+d_df
+levels(factor(d_df$Q8))
+```
+```{r}
+unique(d_df$Q7)
+```
+
+
+```{r}
+#RANDOMIZATION INFERENCE FOR A/A TESTING for #Q7
+
+Q7 <- function(x)
+if ( x=="Tuberculosis could be wiped if we treated it with the same strategy in poor countries as we do in healthy countries.") {
+1
+} else if ( x=="Tuberculosis is no longer a health issue." ) {
+2
+} else if ( x=="There is a single global strategy for tuberculosis treatment worldwide" ) {
+3
+} else if ( x=="Tuberculosis can be treated with diet of gummy bears and diet soda" ) {
+4
+}
+
+d_df$Q7results <- as.numeric(lapply(d_df$Q7,Q7))
+
+#Count of subjects in treatment and control
+randomize <- function() sample(c(rep(0,53),rep(1,57)))
+po.control <- as.numeric(d_df$Q7results)
+#Sharp null hypothesis
+po.treatment <- po.control
+randomtreatment<-randomize()
+outcomes <- po.treatment * randomtreatment + po.control*(1-randomtreatment)
+est.ate <- function(outcome, treat) mean(outcome[treat==1]) - 
+mean(outcome[treat==0])
+#ATE's generated from 10,000 differeent randomizations of treatment and control
+distribution <- replicate(10000, est.ate(outcomes, randomize()))
+ate=mean(d_df[d_df$Group=='Treatment',]$Q7results)-mean(d_df[d_df$Group=='Control',]$Q7results)
+
+plot(density(distribution),main="RANDOMIZATION INFERENCE for #Q7")
+abline(v=ate)
+
+#P-value associated with point estimate of ATE
+pvalue=mean(ate <= distribution)
+pvalue
+cat('With a P-value of', pvalue, 'the difference in means for this particular experiment is not significant.')
+```
+
+
+```{r}
+#RANDOMIZATION INFERENCE FOR A/A TESTING for #Q9
+
+
+#Count of subjects in treatment and control
+group <- group_by(d_df,Group)
+group %>% tally()
+group
+randomize <- function() sample(c(rep(0,53),rep(1,57)))
+po.control <- strtoi(d_df$Q9_1)
+#Sharp null hypothesis
+po.treatment <- po.control
+randomtreatment<-randomize()
+outcomes <- po.treatment * randomtreatment + po.control*(1-randomtreatment)
+est.ate <- function(outcome, treat) mean(outcome[treat==1]) - 
+mean(outcome[treat==0])
+#ATE's generated from 10,000 differeent randomizations of treatment and control
+distribution <- replicate(10000, est.ate(outcomes, randomize()))
+summarise(group,PositiveView = mean(Q9_1))
+ate=mean(strtoi(d_df[d_df$Group=='Treatment',]$Q9_1))-mean(strtoi(d_df[d_df$Group=='Control',]$Q9_1))
+
+plot(density(distribution),main="RANDOMIZATION INFERENCE for #Q9")
+abline(v=ate)
+
+#P-value associated with point estimate of ATE
+pvalue=mean(ate <= distribution)
+pvalue
+
+cat('With a P-value of', pvalue, 'the difference in means for this particular experiment is not significant.')
+
+
+```
+```{r}
+#RANDOMIZATION INFERENCE FOR A/A TESTING for #Q11
+
+
+#Count of subjects in treatment and control
+randomize <- function() sample(c(rep(0,53),rep(1,57)))
+po.control <- strtoi(d_df$Q11_1)
+#Sharp null hypothesis
+po.treatment <- po.control
+randomtreatment<-randomize()
+outcomes <- po.treatment * randomtreatment + po.control*(1-randomtreatment)
+est.ate <- function(outcome, treat) mean(outcome[treat==1]) - 
+mean(outcome[treat==0])
+#ATE's generated from 10,000 differeent randomizations of treatment and control
+distribution <- replicate(10000, est.ate(outcomes, randomize()))
+ate=mean(strtoi(d_df[d_df$Group=='Treatment',]$Q11_1))-mean(strtoi(d_df[d_df$Group=='Control',]$Q11_1))
+
+plot(density(distribution),main="RANDOMIZATION INFERENCE for #Q11")
+abline(v=ate)
+
+#P-value associated with point estimate of ATE
+pvalue=mean(ate <= distribution)
+pvalue
+
+cat('With a P-value of', pvalue, 'the difference in means for this particular experiment is not meaningful even though it is almost significant.')
+```
+
+```{r}
+#RANDOMIZATION INFERENCE FOR A/A TESTING for #Q8
+Q8 <- function(x)
+if ( x=="Yes") {
+1
+} else if ( x=="No") {
+0
+} else if ( x=="Maybe") {
+0.5
+}
+
+d_df$Q8results <- as.numeric(lapply(d_df$Q8,Q8))
+
+#Count of subjects in treatment and control
+randomize <- function() sample(c(rep(0,53),rep(1,57)))
+po.control <- as.numeric(d_df$Q8results)
+#Sharp null hypothesis
+po.treatment <- po.control
+randomtreatment<-randomize()
+outcomes <- po.treatment * randomtreatment + po.control*(1-randomtreatment)
+est.ate <- function(outcome, treat) mean(outcome[treat==1]) - 
+mean(outcome[treat==0])
+#ATE's generated from 10,000 differeent randomizations of treatment and control
+distribution <- replicate(10000, est.ate(outcomes, randomize()))
+ate=mean(d_df[d_df$Group=='Treatment',]$Q8results)-mean(d_df[d_df$Group=='Control',]$Q8results)
+
+plot(density(distribution),main="RANDOMIZATION INFERENCE for #Q8")
+abline(v=ate)
+
+
+
+#P-value associated with point estimate of ATE
+pvalue=mean(ate <= distribution)
+pvalue
+cat('With a P-value of', pvalue, 'the difference in means for this particular experiment is not significant.')
+```
+
+
+
+
+```{r}
+#RANDOMIZATION INFERENCE FOR A/A TESTING for #Q11
+
+
+#Count of subjects in treatment and control
+randomize <- function() sample(c(rep(0,53),rep(1,57)))
+po.control <- strtoi(d_df$Q11_1)
+#Sharp null hypothesis
+po.treatment <- po.control
+randomtreatment<-randomize()
+outcomes <- po.treatment * randomtreatment + po.control*(1-randomtreatment)
+est.ate <- function(outcome, treat) mean(outcome[treat==1]) - 
+mean(outcome[treat==0])
+#ATE's generated from 10,000 differeent randomizations of treatment and control
+distribution <- replicate(10000, est.ate(outcomes, randomize()))
+ate=mean(strtoi(d_df[d_df$Group=='Treatment',]$Q11_1))-mean(strtoi(d_df[d_df$Group=='Control',]$Q11_1))
+
+plot(density(distribution),main="RANDOMIZATION INFERENCE for #Q11")
+abline(v=ate)
+
+#P-value associated with point estimate of ATE
+pvalue=mean(ate <= distribution)
+pvalue
+
+cat('With a P-value of', pvalue, 'the difference in means for this particular experiment is meaningful and has very low probability that it was a result of chance.')
+```
+
+
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
