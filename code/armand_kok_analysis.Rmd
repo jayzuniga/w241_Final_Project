@@ -1,0 +1,120 @@
+---
+title: "w241_final_project"
+author: "Armand Kok"
+date: "December 2, 2018"
+output: pdf_document
+---
+```{r setup, include=FALSE}}
+# load packages 
+library(foreign)
+library(data.table)
+library(foreign)
+library(tidyr)
+library(lmtest)
+library(sandwich)
+library(multiwayvcov)
+```
+
+```{r}
+#load data
+d <- read.csv('primary_clean_data.csv')
+d <- data.table(d)
+head(d)
+```
+
+# Data Exploration
+
+## group
+
+Look at the number of treatment and control, make sure that they're even. 200 responses were requested, however there are 227 responses in total, so it looks like some people clicked through multiple times
+
+```{r}
+d[,list(observations = .N), by = group]
+```
+
+## finished
+
+It looks like there are about twenty people who did not finish
+
+```{r}
+paste('Number of people who did not finish the survey:', nrow(d[d$finished == 'False',]))
+
+#filter out people who did not finish the surveys
+d <- d[d$finished == 'True']
+```
+
+
+## ip_Address
+
+There are multiple people with the same IP Address, should we worry about this?
+
+```{r}
+ip_dt <- d[,list(count = .N), by = ip_address]
+ip_dt[order(-rank(count))]
+```
+
+
+## time_submit_article_treatment
+
+Threshold at 30 seconds, people who spends less than 30 seconds are considered never takers.
+
+```{r}
+#never takers in each group
+nt_control <- nrow(d[d$time_submit_article_control < 30,])
+nt_treatment <- nrow(d[d$time_submit_article_treatment < 30,])
+
+#print out the number of never takers in each group
+paste('Never Takers in Control:', nt_control)
+paste('Never Takers in Treatment:', nt_treatment)
+
+
+#TODO: create column for nevertaker indicator
+#TODO: combine the time columns for both treatment and control
+d$nt_ind <- d$time_submit_article_control < 30
+```
+
+
+# Regression Models
+
+## ITT Calculation
+
+```{r}
+#ITT calculation
+model_one <- lm(article_effectiveness ~ group, data = d)
+coeftest(model_one, vcovHC)
+```
+
+```{r}
+#ITT calculation
+model_two <- lm(recommend_article ~ group, data = d)
+coeftest(model_two, vcovHC)
+```
+
+```{r}
+#ITT calculation
+model_three <- lm(support_tb ~ group, data = d)
+coeftest(model_three, vcovHC)
+```
+
+## ITT Multiple Regression
+
+```{r}
+model_four <- lm(recommend_article ~ group + political_identification + age + gender,
+                 data = d)
+
+coeftest(model_four, vcovHC)
+```
+
+```{r}
+model_five <- lm(support_tb ~ group + political_identification + age + gender
+                 , data = d)
+
+coeftest(model_five, vcovHC)
+```
+
+
+
+
+
+
+
