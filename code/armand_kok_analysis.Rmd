@@ -15,9 +15,17 @@ library(sandwich)
 library(multiwayvcov)
 ```
 
+
+# TODOs
+* remove users who participate in both studies
+
+
+
 ```{r}
+mydir <- 'C:/Users/ak021523/Documents/GitHub/mids-repos/W241/w241_Final_Project/'
+
 #load data
-d <- read.csv('primary_clean_data.csv')
+d <- read.csv(paste0(mydir,'clean_data.csv'))
 d <- data.table(d)
 head(d)
 ```
@@ -29,92 +37,188 @@ head(d)
 Look at the number of treatment and control, make sure that they're even. 200 responses were requested, however there are 227 responses in total, so it looks like some people clicked through multiple times
 
 ```{r}
-d[,list(observations = .N), by = group]
+group_dt <- d[,list(observations = .N), by = list(phase, group),]
+group_dt[order(phase, group)]
 ```
 
 ## finished
 
-It looks like there are about twenty people who did not finish
+It looks like there are about twenty people who did not finish, these folks will be filtered out.
 
 ```{r}
-paste('Number of people who did not finish the survey:', nrow(d[d$finished == 'False',]))
+paste('Number of people who did not finish the survey:', nrow(d[d$finished == FALSE,]))
 
 #filter out people who did not finish the surveys
-d <- d[d$finished == 'True']
+d <- d[d$finished == TRUE,]
 ```
 
+## Never Takers
 
-## ip_Address
-
-There are multiple people with the same IP Address, should we worry about this?
+The never takers are the people who spends less than 30 seconds in the article page, or people who answers the comprehension question with  "Tuberculosis can be treated with diet of gummy bears and diet soda", Tuberculosis is no longer a health issue", and "Kevin P can wipe out tuberculosis in his free time"
 
 ```{r}
-ip_dt <- d[,list(count = .N), by = ip_address]
-ip_dt[order(-rank(count))]
+d$nt_ind <- (d$time_submit_article < 30 | 
+             d$point_of_article == 'Tuberculosis is no longer a health issue.' |
+             d$point_of_article == 'Tuberculosis can be treated with diet of gummy bears and diet soda')
+
+
+d$complier_ind <- (d$nt_ind != TRUE)
 ```
 
-
-## time_submit_article_treatment
-
-Threshold at 30 seconds, people who spends less than 30 seconds are considered never takers.
+In the placebo test, there were around 16 never takers in the control group, and 14 never takers in the treatment group.
 
 ```{r}
 #never takers in each group
-nt_control <- nrow(d[d$time_submit_article_control < 30,])
-nt_treatment <- nrow(d[d$time_submit_article_treatment < 30,])
+nt_control <- nrow(d[d$nt_ind == 1 & d$group == 'Control' & d$phase == 'Placebo Test',])
+nt_treatment <- nrow(d[d$nt_ind == 1 & d$group == 'Treatment' & d$phase == 'Placebo Test',])
 
 #print out the number of never takers in each group
 paste('Never Takers in Control:', nt_control)
 paste('Never Takers in Treatment:', nt_treatment)
+```
 
+In the primary experiment there are around 13 never takers in the control group, and about 28 never takers in the treatment group.
 
-#TODO: create column for nevertaker indicator
-#TODO: combine the time columns for both treatment and control
-d$nt_ind <- d$time_submit_article_control < 30
+```{r}
+#never takers in each group
+nt_control <- nrow(d[d$nt_ind == 1 & d$group == 'Control' & d$phase == 'Primary',])
+nt_treatment <- nrow(d[d$nt_ind == 1 & d$group == 'Treatment' & d$phase == 'Primary',])
+
+#print out the number of never takers in each group
+paste('Never Takers in Control:', nt_control)
+paste('Never Takers in Treatment:', nt_treatment)
+```
+
+## worker_id
+
+```{r}
+dupe_dt <- d[,list(observations = .N), by = list(worker_id),]
+dupe_dt[dupe_dt$observations > 1,]
+```
+
+```{r}
+d[d$worker_id == 'A1CPVTZAK27YSF',]
+d[d$worker_id == 'A2AAG78CGKX2U5']
+```
+
+## political_identification
+
+Binarize political identification
+
+```{r}
+
+df <- data.table(d$political_identification)
+df <- data.table(model.matrix(~ . + 0, data=df, contrasts.arg = lapply(df, contrasts, contrasts=FALSE)))
+
+d$republican <- df$V1Republican
+d$democratic <- df$V1Democratic
+d$independent <- df$V1Independent
 ```
 
 
-# Regression Models
+## gender
+
+Binarize the gender
+
+```{r}
+df <- data.table(d$gender)
+df <- data.table(model.matrix(~ . + 0, data=df, contrasts.arg = lapply(df, contrasts, contrasts=FALSE)))
+
+d$female <- df$V1Female
+```
+
+## age
+
+Binarize the age categories
+
+```{r}
+df <- data.table(d$age)
+df <- data.table(model.matrix(~ . + 0, data=df, contrasts.arg = lapply(df, contrasts, contrasts=FALSE)))
+
+d$age_18_24 <- df$`V118-24`
+d$age_26_35 <- df$`V126-35`
+d$age_36_48 <- df$`V136-48`
+d$age_49_59 <- df$`V149-59`
+d$age_59_older <- df$`V159 or older`
+```
+
+# Placebo Test
+
+```{r}
+#partition placebo data
+placebo_dt <- d[d$phase == 'Placebo Test',]
+```
 
 ## ITT Calculation
 
 ```{r}
 #ITT calculation
-model_one <- lm(article_effectiveness ~ group, data = d)
+model_one <- lm(article_effectiveness ~ group, data = placebo_dt)
 coeftest(model_one, vcovHC)
 ```
 
 ```{r}
-#ITT calculation
-model_two <- lm(recommend_article ~ group, data = d)
-coeftest(model_two, vcovHC)
+itt <- mean(placebo_dt[placebo_dt$group == 'Treatment',]$article_effectiveness)-
+       mean(placebo_dt[placebo_dt$group == 'Control',]$article_effectiveness)
+```
+
+
+## CACE Calculation
+
+```{r}
+#CACE one
+cace_one <- lm(article_effectiveness ~ group, data = d[d$phase == 'Placebo Test' & d$nt_ind == 0,])
+coeftest(cace_one, vcovHC)
+```
+
+
+```{r}
+cace <- mean(placebo_dt[placebo_dt$group == 'Treatment' 
+                        & placebo_dt$nt_ind == 0,]$article_effectiveness) - 
+        mean(placebo_dt[placebo_dt$group == 'Control' 
+                        & placebo_dt$nt_ind == 0,]$article_effectiveness)
+paste(cace)
+```
+
+# Primary
+
+```{r}
+#partition placebo data
+primary_dt <- d[d$phase == 'Primary']
+```
+
+## article effectiveness outcome
+
+```{r}
+cace_model <- lm(article_effectiveness ~ group, data = primary_dt[primary_dt$complier_ind == 1])
+coeftest(cace_model, vcovHC)
 ```
 
 ```{r}
-#ITT calculation
-model_three <- lm(support_tb ~ group, data = d)
-coeftest(model_three, vcovHC)
+#TODO: add a regression model that have interaction term with political_identification
+mv_cace_model <- lm(article_effectiveness ~ group + age_18_24 + age_26_35 + age_59_older + age_49_59 + female + democratic + republican, data = primary_dt[primary_dt$complier_ind == 1])
+coeftest(mv_cace_model)
 ```
 
-## ITT Multiple Regression
-
+## support_tb
 ```{r}
-model_four <- lm(recommend_article ~ group + political_identification + age + gender,
-                 data = d)
-
-coeftest(model_four, vcovHC)
+cace_model <- lm(support_tb ~ group, data = primary_dt[primary_dt$complier_ind == 1])
+coeftest(cace_model, vcovHC)
 ```
 
 ```{r}
-model_five <- lm(support_tb ~ group + political_identification + age + gender
-                 , data = d)
-
-coeftest(model_five, vcovHC)
+mv_cace_model <- lm(support_tb ~ group + age_18_24 + age_26_35 + age_59_older + age_49_59 + female + democratic + republican, data = primary_dt[primary_dt$complier_ind == 1])
+coeftest(mv_cace_model)
 ```
 
+## recommend_article
 
+```{r}
+cace_model <- lm(recommend_article ~ group, data = primary_dt[primary_dt$complier_ind == 1])
+coeftest(cace_model, vcovHC)
+```
 
-
-
-
-
+```{r}
+mv_cace_model <- lm(recommend_article ~ group + age_18_24 + age_26_35 + age_59_older + age_49_59 + female + democratic + republican, data = primary_dt[primary_dt$complier_ind == 1])
+coeftest(mv_cace_model)
+```
